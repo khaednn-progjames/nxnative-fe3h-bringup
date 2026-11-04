@@ -22,7 +22,7 @@ python3 -m pip install lz4 "capstone>=5,<6" fonttools nsz zbic "backports.zstd; 
 
 ## Game files
 
-Use an extracted folder from a game copy you own. The Switch 2 folder workflow does not need `prod.keys`. Keep the dump and extracted files outside this repository. The expected folder layout and file requirements are in the [Mac project guide](docs/fortunes-weave-mac.md#required-game-files).
+You need a legally obtained dump of the game you want to build. Original Switch NSP/XCI workflows can require the matching update and your own local `prod.keys`. Fortune's Weave uses an extracted Switch 2 folder, so this build path does not need keys. Keep the dump, extracted files, and any keys outside this repository. The expected folder layout and file requirements are in the [Mac project guide](docs/fortunes-weave-mac.md#required-game-files).
 
 ## Build the Mac app
 
@@ -33,6 +33,22 @@ python3 scripts/build_ipa_from_nsp.py "/path/to/GAME_FOLDER" --platform mac-app
 ```
 
 The app and intermediate build data are created beside the game folder by default. Keep those local outputs private; they contain game data or derived assets. See the guide for output options, the launch sequence, frame pacing, and performance details.
+
+## How I used Codex
+
+Codex is free on the ChatGPT Free plan. I used it as a coding assistant: I provided the [NxNative source](https://github.com/seedds/nxnative), the [AppleGamingWiki Mac conversion guide](https://www.applegamingwiki.com/wiki/Nxnative_Switch_to_Mac_conversion), and my game files locally, then asked it to adapt NxNative for Fortune's Weave. We iterated through the title profile, app build, launch errors, graphics issues, and frame pacing. The app itself was built and tested locally on the Mac; no game dump or keys came from Codex or went into this repository. [OpenAI plan details](https://learn.chatgpt.com/docs/pricing).
+
+Here is a cleaned-up version of the prompt I used:
+
+```text
+Use the NxNative source and the AppleGamingWiki Mac conversion guide below as references. I have my own legally obtained dump of [GAME TITLE]. Check whether this title needs NSP/XCI files or an already-extracted folder, then adapt NxNative to build a native macOS app for it. Inspect the title and executable build IDs, make only the game-specific changes needed, build the app locally, and help diagnose problems from its logs and screenshots. Investigate separate 60 FPS and 120 FPS options, and verify that gameplay speed and simulation timing stay correct before calling either one working. Keep game files, keys, saves, private paths, and credentials out of GitHub. Explain the steps and identify anything that still needs testing.
+
+NxNative source: https://github.com/seedds/nxnative
+Mac conversion guide: https://www.applegamingwiki.com/wiki/Nxnative_Switch_to_Mac_conversion
+Game files: [provide locally]
+```
+
+During this project's testing, I requested both 60 FPS and 120 FPS options, then removed 120 FPS and kept the 60 FPS patch. Forcing a frame on every display refresh made frame-counted gameplay run twice as fast; the Mac launch configuration now follows the game's own present interval. A high-refresh patch must preserve the game's simulation timing too.
 
 ## Project files
 
