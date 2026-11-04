@@ -1,8 +1,10 @@
 # nxnative
 
+This fork's Fire Emblem Fortune's Weave Mac build is documented in [the project guide](docs/fortunes-weave-mac.md), including the build flow, code layout, and what stays local. The guide contains no game dump, keys, saves, or personal machine paths.
+
 Play your own Nintendo Switch games natively on iPhone and iPad. Bring your game (its NSP files) and your `prod.keys`; one script turns them into an IPA that you sideload.
 
-It is not an emulator: the game's own code runs directly on the Apple chip, with Switch graphics rebuilt on Metal. Nothing from any game is in this repository, and the project is not affiliated with Nintendo or any game publisher.
+It is not an emulator: the game's own code runs directly on the Apple chip, with Switch graphics rebuilt on Metal. The repository does not include game dumps or keys, and the project is not affiliated with Nintendo or any game publisher.
 
 Switch 2 games have started too: [Donkey Kong Bananza](dm/games/040074A01BF12000/README.md) plays on the Mac, packed from a dump of the game; iPhone and iPad are untested.
 

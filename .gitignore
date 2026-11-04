@@ -11,3 +11,30 @@ dm/games/*/cb_extent.tsv
 .coverage
 .coverage.*
 /coverage.json
+
+# Personal game inputs and derived data. Keep ROMs, extracted files, keys, saves,
+# logs, and packaged apps outside the source history.
+*.nsp
+*.nsz
+*.xci
+*.xcz
+prod.keys
+title.keys
+*.keys
+*.tik
+*.cert
+.env
+.env.*
+*.local
+base/
+updates/
+dlc/
+*_build/
+save/
+saves/
+*.sav
+SlotData*
+UserData
+*.app/
+*.ipa
+*.log
