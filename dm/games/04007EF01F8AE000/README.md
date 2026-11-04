@@ -1,6 +1,6 @@
 # Fire Emblem Fortune's Weave (`04007EF01F8AE000`)
 
-A Switch 2 game: v131072, SDK 22.2.0 built for the Switch 2 (`Ounce`), NVN2 API 231.40. Intelligent Systems' engine on NintendoWare (G3d, Ui2d, Vfx, Atk), PhysX 5.6, a deferred renderer. Modules `main`, `subsdk2` (movies) and `sdk`; `subsdk0` (DLSS) and `subsdk1` (CUDA) are not loaded. **Plays on the Mac**: the opening movie, the dialogue and the first battle map, whose first turn matches published footage, plus battle scenes in gameplay testing. No IPA has been built.
+A Switch 2 game: v131072, SDK 22.2.0 built for the Switch 2 (`Ounce`), NVN2 API 231.40. Intelligent Systems' engine on NintendoWare (G3d, Ui2d, Vfx, Atk), PhysX 5.6, a deferred renderer. Modules `main`, `subsdk2` (movies) and `sdk`; `subsdk0` (DLSS) and `subsdk1` (CUDA) are not loaded. **Plays on the Mac**: the opening movie, the dialogue and the first battle map, whose first turn matches published footage, plus battle scenes in gameplay testing.
 
 ## What it needs
 
@@ -40,7 +40,6 @@ Keyboard in a window: J K U I are A B X Y, WASD the left stick, Shift + arrows t
 - Nothing past the first map has been played on this build.
 - `stage 1 cb4 has no uniform buffer bound`, once a run, with no effect seen.
 - MetalFX's jitter sign and DLSS's bias mask are unchecked; the bias mask is only logged. No ghosting has been seen so far.
-- An IPA: the 16 GB alias region is over iOS's limit, as for [Splatoon Raiders](../0400380020056000/README.md).
 - `dm/games/profile_guess.py` does not recognise the SDK's `Generic` version name.
 
 ## Found on this game

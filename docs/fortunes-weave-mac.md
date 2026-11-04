@@ -39,7 +39,7 @@ For encrypted NSP or XCI inputs from original Switch games, a different build pa
 
 ## Build a Mac app
 
-Install the Apple build tools and Python dependencies listed in the main [README](../README.md#build-from-the-command-line). Then run this from the repository root, replacing the example folder with your own dump location:
+Install the Apple build tools and Python dependencies listed in the main [README](../README.md#requirements). Then run this from the repository root, replacing the example folder with your own dump location:
 
 ```sh
 python3 scripts/build_ipa_from_nsp.py "/path/to/GAME_FOLDER" --platform mac-app
@@ -63,7 +63,7 @@ The title profile is tied to the game executable's build ID so a patch cannot si
 
 The game renders an internal scene and asks for temporal upscaling. Lowering output resolution may reduce some display work, but does not automatically reduce the game's internal rendering cost. Shader precompilation helps first-use stutter; it does not make a GPU-bound battle render faster once those shaders are cached. Frame generation is not implemented by this project guide or implied by MetalFX upscaling.
 
-The tested status and title-specific rendering findings are in the [game profile notes](../dm/games/04007EF01F8AE000/README.md). This profile has Mac gameplay coverage; an iOS build is not validated.
+The tested status and title-specific rendering findings are in the [game profile notes](../dm/games/04007EF01F8AE000/README.md). Testing has reached the opening movie, dialogue, first battle map, and battle scenes; later areas have not been fully validated.
 
 ## Keep private files out of Git
 
