@@ -457,7 +457,14 @@ def site_window(seg):
         w = struct.unpack('<I', x.bytes)[0]
         if has18(x): w = subst(x, S)
         m = x.mnemonic
-        if m in ('cbz', 'cbnz', 'tbz', 'tbnz') or m.startswith('b.'):
+        if m == 'b':
+            # Three Hopes 1.0.2 main+0xddd048 clears the exclusive monitor, then unconditionally leaves the window for another lock.
+            tgt = x.operands[-1].imm
+            if lo <= tgt < hi: newt = copy0 + (tgt - lo)
+            else: ex_targets.append(tgt); newt = exits + 16 * (len(ex_targets) - 1)
+            pc = copy0 + 4 * k; w = B(pc, newt)
+            dd = dis(w, pc); assert dd.operands[-1].imm == newt and dd.mnemonic == m
+        elif m in ('cbz', 'cbnz', 'tbz', 'tbnz') or m.startswith('b.'):
             tgt = x.operands[-1].imm
             if lo <= tgt < hi: newt = copy0 + (tgt - lo)
             else: ex_targets.append(tgt); newt = exits + 16 * (len(ex_targets) - 1)
@@ -1229,6 +1236,9 @@ for fa, fb in funcs:
             t = x.operands[-1].imm
             if t in inwin and t not in heads:
                 wseg = next(w for w in ws if any(y.address == t for y in w))
+                # Three Hopes 1.0.2 main+0xddd040 branches within its own exclusive window to the store-exclusive at +0xddd04c.
+                # site_window copies and retargets that conditional branch, so it is not an out-of-line retry block.
+                if x.mnemonic not in ('b', 'bl') and any(y.address == x.address for y in wseg): continue
                 rb = retry_block(insl, k, wseg) if x.mnemonic not in ('b', 'bl') else None
                 assert rb, f'branch into window {x.address:x}'
                 assert not any(y.address in done for y in rb[0]), f'retry block overlaps a window {rb[0][0].address:x}'

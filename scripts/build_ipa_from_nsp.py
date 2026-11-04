@@ -2028,7 +2028,8 @@ def build_shaders(py, repo, sh, xlate, env, logs, g, pkg_key=None, mac=False):
     # a stale key keeps no old library, and restores only the targets it builds. The Metal compile cache gives back every
     # library whose MSL was compiled before.
     keep_mac = not mac and next((sh / 'cache' / f'b-{chain}').glob('*_b.metallib'), None) is not None
-    benv = dict(env, XLATE=str(xlate), IOSOUT=str(ios), DMSH_TARGETS='mac' if mac else 'mac,ios' if keep_mac else 'ios')
+    source_only = mac and env.get('DMSH_SOURCE_ONLY') == '1'
+    benv = dict(env, XLATE=str(xlate), IOSOUT=str(ios), DMSH_TARGETS='source' if source_only else 'mac' if mac else 'mac,ios' if keep_mac else 'ios')
     if ALLOW_OTHER_METAL: benv['DM_ALLOW_OTHER_METAL'] = '1'
     if mac: del benv['IOSOUT']   # dmsh_build.py builds the iOS libraries only with IOSOUT
     try: stale = stale_shaders(py, repo, env, [sh / 'cache'] if mac else [sh / 'cache', ios] if keep_mac else [ios], chain, g)
@@ -2042,9 +2043,10 @@ def build_shaders(py, repo, sh, xlate, env, logs, g, pkg_key=None, mac=False):
     PROG.watch(None)
     if not chain_tables(py, repo, sh, env, logs, g, chain): raise BuildError(f'no stamped Mac shader outputs in {sh / "cache" / f"b-{chain}"} (inputs.tsv): dmsh_build.py did not finish a full build')
     what = 'Mac' if mac else 'iOS'
-    n = sum(1 for _ in libs.glob('*_b.metallib')) if libs.is_dir() else 0
-    if n == 0: raise BuildError(f'no {what} shader libraries in {libs}')
-    say(f'{n} {what} shader libraries ({libs})')
+    suffix = '*.metal' if source_only else '*_b.metallib'
+    n = sum(1 for _ in libs.glob(suffix)) if libs.is_dir() else 0
+    if n == 0: raise BuildError(f'no {what} shader outputs in {libs}')
+    say(f'{n} {what} shader {"sources" if source_only else "libraries"} ({libs})')
     if keep_mac: say(f'{sum(1 for _ in (sh / "cache" / f"b-{chain}").glob("*_b.metallib"))} Mac shader libraries kept for the Mac run command ({sh / "cache" / f"b-{chain}"})')
     t = log.read_text(errors='replace')
     if own := re.search(r'^note: (built with this Mac\'s compilers.*)$', t, re.M): say(own.group(1))
@@ -2271,6 +2273,8 @@ def mac_pso(py, repo, work, lib, g, gpus, env, logs):
     Resources/pso and the launcher hands to the host as DM_PSO_BUNDLE, as the iOS app does (docs/development.md, The pipeline archive made offline): the app's first start builds no base,
     and the bases (about 615 MB for Breath of the Wild) do not go into the player's ~/Library/Application Support. gpus: --gpu / PSO_GPUS (empty: this Mac's GPU; none: no archive, the app
     builds the bases on its first start). Made again only when its inputs change (pso_offline.py's key). Returns the folder, or None"""
+    if not any(lib.glob('*_b.metallib')):
+        say('pipeline archive: none (the app compiles translated shaders and builds pipeline bases when first used)'); return None
     if gpus == 'none': say('pipeline archive: none (--gpu none): the app builds the pipeline bases on its first start'); return None
     if gpus and not re.fullmatch(r'(applegpu_)?g\w+(,(applegpu_)?g\w+)*', gpus): raise BuildError(f'--gpu / PSO_GPUS takes GPU architectures such as g14s, or none: {gpus}')
     try: here = mac_gpu_arch(work, env, logs)
@@ -2468,6 +2472,7 @@ def main(args=None):
     want_lang = language_code(lang_in) if lang_in else 'en-US'
     if not want_lang: raise BuildError(f'unknown game language {lang_in!r}; give one of {language_list([c for c, _ in nacp.LANGUAGES])}, by code or by name')
     env = dict(os.environ, PATH=os.pathsep.join(TOOL_PATHS + [os.environ.get('PATH', '/usr/bin:/bin:/usr/sbin:/sbin')]))
+    if mac_pack: env['DMSH_SOURCE_ONLY'] = '1'   # the Mac app compiles each translated MSL only when the game uses that shader
     env.setdefault('USER', getpass.getuser())   # xcodegen fails without USER (Couldn't find current username)
     configure_dotnet(env)
     env.setdefault('J', str(os.cpu_count() or 8))   # shader_split.py's and dmsh_build.py's workers (their default is 8)

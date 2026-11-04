@@ -8,7 +8,7 @@
 # Build output: <key>_b.metallib, <key>_b.json (replay reflection, including drv_reads, the runtime read offsets into driver segments c0 / c2), <key>_b.metal (MSL)
 # Environment IOSOUT=dir: the same MSL also goes through dm/ios/tools/ios_metal.compile to produce an iphoneos metallib + reflection (chain_metal records the iOS compile convention)
 # Final summary: success / failure counts and the distribution of reasons; distribution of driver segment read offsets (those outside the range the replay layer can fill are listed separately)
-import inspect, os, re, sys, json, struct, hashlib, shutil, subprocess, tempfile, collections, threading, concurrent.futures as cf
+import inspect, os, re, sys, json, struct, hashlib, shutil, subprocess, tempfile, collections, threading, concurrent.futures as cf, multiprocessing as mp
 import dmsh_geometry, dmsh_atomic, dmsh_abi as abi   # abi: the driver segment layout and the binding kinds the host shares (dm/gfx/nvn/dmsh_abi.h)
 DM_ROOT = os.environ.get('DM_ROOT') or os.path.expanduser('~/dm-work')   # Workspace root (game files, build outputs and run artifacts are all under it)
 HOME = os.path.expanduser('~')
@@ -25,11 +25,13 @@ SPIRV_CROSS = dmsh_chain.SPIRV_CROSS   # the in-repo build the lock records
 FACTS = dmsh_facts.load()
 if not os.path.exists(dmsh_facts.TABLE): sys.exit(f'[RED] no answer table {dmsh_facts.TABLE} (it comes with the game profile; an empty table = every query answered with defaults)')
 IOSOUT = os.environ.get('IOSOUT')   # destination for requested iOS libraries (iphoneos metallib + reflection)
-# Which metallibs this run builds: DMSH_TARGETS=mac,ios (default: both when IOSOUT is set, else mac). The Mac
+# Which libraries this run builds: DMSH_TARGETS=mac,ios (default: both when IOSOUT is set, else mac); source
+# selects the Mac MSL/reflection outputs without compiling metallibs, for a Mac app that compiles shaders on first use. The Mac
 # sources and reflection are written even when 'mac' is left out (the profile's c1_full / cb_extent tables are
 # made from them), so an iOS-only build skips only the macOS compile, about half of the Metal work.
 TARGETS = {t.strip() for t in (os.environ.get('DMSH_TARGETS') or ('mac,ios' if IOSOUT else 'mac')).split(',') if t.strip()}
-if not TARGETS or not TARGETS <= {'mac', 'ios'}: sys.exit(f'[RED] DMSH_TARGETS takes mac and/or ios: {",".join(sorted(TARGETS)) or "empty"}')
+if not TARGETS or not TARGETS <= {'mac', 'ios', 'source'} or ('source' in TARGETS and TARGETS != {'source'}): sys.exit(f'[RED] DMSH_TARGETS takes mac, ios, or source alone: {",".join(sorted(TARGETS)) or "empty"}')
+SOURCE_ONLY = TARGETS == {'source'}
 if 'ios' in TARGETS and not IOSOUT: sys.exit('[RED] DMSH_TARGETS asks for iOS libraries without IOSOUT')
 if 'ios' not in TARGETS: IOSOUT = None   # every side library, cache, cleanup and stamp follows the same selection
 if IOSOUT:
@@ -354,7 +356,7 @@ def fetch_finish(key, src, refl):
                 BF_STATS['compile'] += 1
                 bf_cache_publish(digest, fmsl, flib, ilib, fmeta)
         finally:
-            for path in (fmsl, fmsl[:-6] + '.air', fmsl[:-6] + '.ios.air'):
+            for path in (() if SOURCE_ONLY else (fmsl,)) + (fmsl[:-6] + '.air', fmsl[:-6] + '.ios.air'):
                 try: os.unlink(path)
                 except FileNotFoundError: pass
     refl['fetch'] = fmeta
@@ -386,6 +388,7 @@ def pull_finish(key, full, refl):
     try:
         if 'mac' in TARGETS: MTL.compile('mac', msl, libs[0])
         if IOSOUT: MTL.compile('ios', msl, libs[1])
+        if SOURCE_ONLY: clone(msl, libs[0].removesuffix('.metallib') + '.metal')
     except subprocess.CalledProcessError as e:
         PULL_STATS['failed'] += 1; print(f'[RED] {key}: the pulling library does not compile ({str(e)[:120]}): its pipelines are always built for the draw\'s vertex layout', flush=True)
         drop(); return refl
@@ -415,6 +418,7 @@ def vin_finish(key, full, refl):
     try:
         if 'mac' in TARGETS: MTL.compile('mac', msl, libs[0])
         if IOSOUT: MTL.compile('ios', msl, libs[1])
+        if SOURCE_ONLY: clone(msl, libs[0].removesuffix('.metallib') + '.metal')
     except subprocess.CalledProcessError as e:
         VIN_STATS['failed'] += 1; print(f'[RED] {key}: the shadow-input library does not compile ({str(e)[:120]}): its integer inputs keep the CPU conversion', flush=True)
         drop(); return refl
@@ -441,6 +445,7 @@ def ps_side_finish(key, full, refl, mod, sfx, field, stats, what):
     try:
         if 'mac' in TARGETS: MTL.compile('mac', msl, libs[0])
         if IOSOUT: MTL.compile('ios', msl, libs[1])
+        if SOURCE_ONLY: clone(msl, libs[0].removesuffix('.metallib') + '.metal')
     except subprocess.CalledProcessError as e:
         stats['failed'] += 1; print(f'[RED] {key}: the {what} library does not compile ({str(e)[:120]}): its draws go without it', flush=True)
         drop(); return refl
@@ -1331,7 +1336,7 @@ def fin(key):
     result = (key,) + finish(key, w, jobs[key], c1s[key])
     if result[1] == 'ok': publish_cache(key, digests[key], rule_fps[key], CODE_FP)
     return result
-with cf.ThreadPoolExecutor(NJ) as ex:   # two phases: paired vertex shaders read their pixel shaders' MSL (vs_pad), so they go last
+with cf.ProcessPoolExecutor(NJ, mp_context=mp.get_context('fork')) as ex:   # MSL rewriting is Python/GIL-bound; separate processes use the Mac's cores. Paired vertex shaders read their pixel shaders' MSL (vs_pad), so they go last
     res = list(ex.map(fin, [k for k in keys if k not in PAIRS])) + list(ex.map(fin, [k for k in keys if k in PAIRS]))
 # Passthrough geometry as mesh shaders (dmsh_mesh.py): <vertex key>_<geometry key>_m3 for each pair in the profile's geo_mesh.tsv whose two libraries exist; the host
 # draws a lean triangle-list geometry draw with it when its pair has one, and through the compute path otherwise (nvn_geometry.inc geo_mesh_draw)
@@ -1347,6 +1352,7 @@ def mesh_finish(pair):
     try:
         if 'mac' in TARGETS: MTL.compile('mac', path, libs[0])
         if IOSOUT: MTL.compile('ios', path, libs[1])
+        if SOURCE_ONLY: clone(path, libs[0].removesuffix('.metallib') + '.metal')
         MESH_STATS['built'] += 1
     except subprocess.CalledProcessError as e: MESH_STATS['failed to compile'] += 1; print(f'[RED] mesh {vk} {gk}: does not compile ({str(e)[:120]})', flush=True)
 _mesh = GAME.table('geo_mesh.tsv')

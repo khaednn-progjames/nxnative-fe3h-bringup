@@ -3941,6 +3941,16 @@ static void pso_user_record(const char *fmt, ...) {
 static __thread int t_lib_layer;
 static id<MTLLibrary> lib_from_file(NSString *path, NSError **err) {
     int fd = open(path.fileSystemRepresentation, O_RDONLY); struct stat st;
+    if (fd < 0 && errno == ENOENT) {   // source-only Mac app: compile this translated shader on first use; options match dmsh_build.py's -O1 -fpreserve-invariance (a real game MSL compiled through this API in 0.7 s)
+        NSString *sourcePath = [[path stringByDeletingPathExtension] stringByAppendingPathExtension:@"metal"];
+        NSError *se = nil; NSString *source = [NSString stringWithContentsOfFile:sourcePath encoding:NSUTF8StringEncoding error:&se];
+        if (!source) { if (err) *err = se; return nil; }
+        t_lib_layer = [source rangeOfString:@"render_target_array_index"].location != NSNotFound;
+        MTLCompileOptions *options = [MTLCompileOptions new]; options.preserveInvariance = YES; options.optimizationLevel = MTLLibraryOptimizationLevelDefault;
+        static _Atomic int compiled; int n = atomic_fetch_add(&compiled, 1) + 1;
+        if (n <= 8 || !(n & (n - 1))) MLOG("translated MSL %s compiled on first use (%d libraries)", path.lastPathComponent.UTF8String, n);
+        return [g_dev newLibraryWithSource:source options:options error:err];
+    }
     if (fd < 0 || fstat(fd, &st) || st.st_size <= 0) { if (fd >= 0) close(fd); if (err) *err = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"cannot open %@", path]}]; return nil; }
     size_t len = (size_t)st.st_size; void *m = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
     t_lib_layer = m != MAP_FAILED && memmem(m, len, "render_target_array_index", 25) != NULL;   // the library's functions use the layer: for a vertex library, its output (shader_load)
@@ -11694,11 +11704,12 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
     if (!v) { RED_ONCE(69, "present: cannot create a non-sRGB view of the sRGB swapchain texture (format %lu); presenting the decoded values", (unsigned long)src.pixelFormat); return src; }
     return v;
 }
-// The rectangle of the canvas (dw x dh) the picture (cw x ch) is drawn into: the picture's aspect ratio kept and centred, black bars in the rest (no stretching when the screen's ratio
-// differs from the game's, e.g. iPhone about 19.5:9 against the game's 16:9); when the ratios differ by under 1 % (the remainder from a game width that is a multiple of 8 in the
-// full-screen setup, e.g. 1952x900 against 2868x1320 differs by 0.17 %) the whole canvas, leaving no border of a few pixels
+// Windowed mode fits the picture and leaves bars rather than distorting it. Fullscreen fills the canvas and crops the sides or top for a screen with a different aspect ratio.
+// When the ratios differ by under 1 % (the remainder from a game width that is a multiple of 8 in the full-screen setup, e.g. 1952x900 against 2868x1320 differs by 0.17 %),
+// use the whole canvas to avoid a border of a few pixels.
+__attribute__((weak)) int front_fullscreen(void);
 static MTLViewport present_viewport(double cw, double ch, double dw, double dh) {
-    double s = fmin(dw / cw, dh / ch);
+    double s = front_fullscreen() ? fmax(dw / cw, dh / ch) : fmin(dw / cw, dh / ch);
     MTLViewport vp = {floor((dw - cw * s) / 2), floor((dh - ch * s) / 2), round(cw * s), round(ch * s), 0, 1};
     if (fabs((dw / dh) / (cw / ch) - 1) < 0.01) vp = (MTLViewport){0, 0, dw, dh, 0, 1};
     return vp;
