@@ -14,6 +14,14 @@ NxNative runs a game's ARM64 code as native code on Apple silicon. It supplies t
 - `dm/mac/` contains the native launcher and app packager. The launcher reads the app's bundled settings, starts the host, and presents the game window.
 - `dm/third_party/` contains dependencies and their license notes. See [third-party notices](../dm/third_party/README.md).
 
+## How this build came together
+
+1. **Start with the Mac conversion guide.** The [AppleGamingWiki NxNative guide](https://www.applegamingwiki.com/wiki/Nxnative_Switch_to_Mac_conversion) was the starting reference for using NxNative to build a native Mac game app.
+2. **Apply it to this game.** You then asked to adapt that workflow for Fire Emblem Fortune's Weave and supplied the game files. A keys file was part of the initial setup, but the final Switch 2 build uses the already-extracted folder described below and does not need `prod.keys`. No key values or key files are in this repository.
+3. **Add the title-specific profile.** The build identifies the game by its title ID and executable build ID, then uses its profile for memory layout, modules, file packaging, and shader data. The host and Metal layer handle the game's system and graphics calls.
+4. **Package and test on Mac.** `scripts/build_ipa_from_nsp.py --platform mac-app` builds the host and packages the title data, shaders, settings, and launcher into a local `.app`. Testing reached the opening movie, dialogue, first battle map, and battle scenes; findings and unresolved items are in the [title profile notes](../dm/games/04007EF01F8AE000/README.md).
+5. **Correct the frame pacing.** Testing found that forcing one frame on every display refresh made the game's frame-counted logic run twice as fast. For this title, the Mac launch configuration follows the interval requested by the game (`DM_PRESENT_INTERVAL=game`). A 60 FPS change must also keep the game's simulation step synchronized; a display-only override is not enough.
+
 ## Required game files
 
 Use files extracted from a copy of the game you own. The Switch 2 path accepts an extracted folder, so **this build path does not need `prod.keys`**. Keep the original dump and the extracted files outside this Git repository.
